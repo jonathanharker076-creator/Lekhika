@@ -67,9 +67,94 @@ def refine_text(original_text):
 
     return response.json()["choices"][0]["message"]["content"]
 
- @app.post("/generate")
-def generate(data: PromptRequest):
-    draft = generate_text(data.prompt)
-    refined = refine_text(draft)
-    return {"response": refined}
+def expand_ideas(prompt):
+    expansion_prompt = f"""
+    Analyse this topic deeply.
+    Identify:
+    - Core issue
+    - Hidden dimension
+    - Common perspective
+    - Uncommon perspective
+    - Risk factors
+    - Long-term implication
 
+    Topic:
+    {prompt}
+    """
+
+    response = requests.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {OPENROUTER_KEY}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "model": "deepseek/deepseek-chat",
+            "messages": [{"role": "user", "content": expansion_prompt}],
+            "temperature": 0.3
+        }
+    )
+
+    return response.json()["choices"][0]["message"]["content"]
+def write_draft(expanded_analysis):
+    writing_prompt = f"""
+    Using the following analytical notes,
+    write a natural Bengali article.
+
+    Rules:
+    - No textbook formatting.
+    - Avoid generic tone.
+    - Write like an experienced Bengali columnist.
+    - Maintain flow.
+    - Avoid repetitive structure.
+
+    Notes:
+    {expanded_analysis}
+    """
+
+    response = requests.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {OPENROUTER_KEY}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "model": "deepseek/deepseek-chat",
+            "messages": [{"role": "user", "content": writing_prompt}],
+            "temperature": 0.5
+        }
+    )
+
+    return response.json()["choices"][0]["message"]["content"]
+def critical_review(text):
+    review_prompt = f"""
+    Critically review this Bengali article.
+    - Remove generic statements.
+    - Strengthen arguments.
+    - Improve logical coherence.
+    - Remove AI-like tone.
+
+    Text:
+    {text}
+    """
+
+    response = requests.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {OPENROUTER_KEY}",
+            "Content-Type": "application/json"
+        },
+        json={
+            "model": "deepseek/deepseek-chat",
+            "messages": [{"role": "user", "content": review_prompt}],
+            "temperature": 0.2
+        }
+    )
+
+    return response.json()["choices"][0]["message"]["content"]
+@app.post("/generate")
+def generate(data: PromptRequest):
+    expanded = expand_ideas(data.prompt)
+    draft = write_draft(expanded)
+    refined = critical_review(draft)
+    return {"response": refined}
