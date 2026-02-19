@@ -5,156 +5,82 @@ import os
 
 app = FastAPI()
 
+# Read API key from Render environment variables
 OPENROUTER_KEY = os.getenv("OPENROUTER_KEY")
+
+# Personal style injection (edit this to match your tone)
+USER_STYLE = """
+The author writes in:
+- Calm analytical tone
+- Logical and structured reasoning
+- Flowing paragraphs (avoid excessive bullet points)
+- No emotional exaggeration
+- Thoughtful, reflective depth
+- No generic textbook formatting
+"""
 
 class PromptRequest(BaseModel):
     prompt: str
 
-SYSTEM_PROMPT = """
-You are a professional Bengali writing assistant.
 
-Your job is to write in natural, human Bengali that feels authored — not generated.
+def generate_text(user_prompt: str):
+    smart_prompt = f"""
+Writing Style Guidelines:
+{USER_STYLE}
 
-Follow these rules strictly:
+Before writing, internally analyse:
+- Core issue
+- Hidden dimension
+- Opposing perspective
+- Practical implication
+- Long-term consequence
 
-1. Do not use template-based headings unless the topic requires structured sections.
-2. Avoid generic examples unless necessary.
-3. Avoid placeholders like “তথ্যসূত্র উল্লেখ করুন”.
-4. Provide depth of reasoning.
-5. Analyse both common and uncommon possibilities.
-6. Maintain logical flow.
-7. Avoid exaggeration.
-8. If factual uncertainty exists, clearly mention limitation.
-9. Avoid repetitive patterns.
-10. Write like an educated Bengali columnist or researcher.
+Then write a refined Bengali article.
 
-Tone:
-Calm, analytical, thoughtful.
+Rules:
+- Do NOT use generic textbook headings.
+- Avoid predictable structure.
+- Avoid surface-level explanation.
+- Maintain natural human Bengali.
+- Strengthen reasoning.
+- Avoid repetition.
+- If factual uncertainty exists, clearly state limitation.
+- Write like a thoughtful Bengali columnist.
 
-Structure:
-Introduction → Core analysis → Broader implication → Conclusion.
-
-Never sound mechanical.
-Never sound like a generic AI.
+Topic:
+{user_prompt}
 """
 
-@app.post("/generate")
-def refine_text(original_text):
-    refinement_prompt = f"""
-    Improve the following Bengali text:
-    - Make it more natural.
-    - Remove generic tone.
-    - Strengthen logical flow.
-    - Remove vague claims.
-    - Make it feel human-written.
+    try:
+        response = requests.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {OPENROUTER_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "deepseek/deepseek-chat",
+                "messages": [
+                    {"role": "user", "content": smart_prompt}
+                ],
+                "temperature": 0.35,
+                "max_tokens": 800
+            },
+            timeout=20
+        )
 
-    Text:
-    {original_text}
-    """
+        data = response.json()
 
-    response = requests.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {OPENROUTER_KEY}",
-            "Content-Type": "application/json"
-        },
-        json={
-            "model": "deepseek/deepseek-chat",
-            "messages": [{"role": "user", "content": refinement_prompt}],
-            "temperature": 0.2
-        }
-    )
+        if "choices" in data and len(data["choices"]) > 0:
+            return data["choices"][0]["message"]["content"]
+        else:
+            return f"Model error: {data}"
 
-    return response.json()["choices"][0]["message"]["content"]
+    except Exception as e:
+        return f"System error: {str(e)}"
 
-def expand_ideas(prompt):
-    expansion_prompt = f"""
-    Analyse this topic deeply.
-    Identify:
-    - Core issue
-    - Hidden dimension
-    - Common perspective
-    - Uncommon perspective
-    - Risk factors
-    - Long-term implication
 
-    Topic:
-    {prompt}
-    """
-
-    response = requests.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {OPENROUTER_KEY}",
-            "Content-Type": "application/json"
-        },
-        json={
-            "model": "deepseek/deepseek-chat",
-            "messages": [{"role": "user", "content": expansion_prompt}],
-            "temperature": 0.3
-        }
-    )
-
-    return response.json()["choices"][0]["message"]["content"]
-def write_draft(expanded_analysis):
-    writing_prompt = f"""
-    Using the following analytical notes,
-    write a natural Bengali article.
-
-    Rules:
-    - No textbook formatting.
-    - Avoid generic tone.
-    - Write like an experienced Bengali columnist.
-    - Maintain flow.
-    - Avoid repetitive structure.
-
-    Notes:
-    {expanded_analysis}
-    """
-
-    response = requests.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {OPENROUTER_KEY}",
-            "Content-Type": "application/json"
-        },
-        json={
-            "model": "deepseek/deepseek-chat",
-            "messages": [{"role": "user", "content": writing_prompt}],
-            "temperature": 0.5
-        }
-    )
-
-    return response.json()["choices"][0]["message"]["content"]
-def critical_review(text):
-    review_prompt = f"""
-    Critically review this Bengali article.
-    - Remove generic statements.
-    - Strengthen arguments.
-    - Improve logical coherence.
-    - Remove AI-like tone.
-
-    Text:
-    {text}
-    """
-
-    response = requests.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {OPENROUTER_KEY}",
-            "Content-Type": "application/json"
-        },
-        json={
-            "model": "deepseek/deepseek-chat",
-            "messages": [{"role": "user", "content": review_prompt}],
-            "temperature": 0.2
-        }
-    )
-
-    return response.json()["choices"][0]["message"]["content"]
 @app.post("/generate")
 def generate(data: PromptRequest):
-    expanded = expand_ideas(data.prompt)
-    draft = write_draft(expanded)
-    refined = critical_review(draft)
-    return {"response": refined}
+    result = generate_text(data.prompt)
+    return {"response": result}
